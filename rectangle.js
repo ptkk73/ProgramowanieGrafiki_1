@@ -136,6 +136,10 @@ function drawSun(context, canvas)
     context.fillStyle = 'rgba(200, 220, 20, 0.4)';
     var x = canvas.width - 800;
     var y = 260;
+
+    x = x + Math.sin(time * 0.003) * 10.0;
+    y = y - Math.cos(time * 0.003) * 10.0;
+
     context.moveTo(x, y);
     context.bezierCurveTo(x + 800, y - 200, x + 800, y - 240,x + 100 * 1.9, y);
     context.bezierCurveTo(x + 800, y - 200, x + 800, y - 240,x + 160 * 1.9, y + 50 * 1.9);
@@ -178,34 +182,75 @@ function drawSky(context, canvas)
 
 
 }
+var time = 0.0;
 
 function drawScene()
 {
+    document.onmousemove = mousePos();
+
     var canvas = document.getElementById("myCanvasForRendering");
     var context = canvas.getContext('2d');
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
+    window.requestAnimFrame = (function(callback) {
+        return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+            function(callback) {
+                window.setTimeout(callback, 1000 / 60);
+            };
+    })();
+
+
     drawSky(context, canvas);
 
     drawEnvironment(context, canvas);
 
-    drawElephant(context);
+    drawElephant(context, time, 800, canvas.height - 420);
 
 
     drawGrassOverlay(context, canvas);
 
     drawSun(context, canvas);
+    time += 16.0;
+
+    window.requestAnimationFrame(drawScene);
+
+
 }
 
-function drawElephant(context) {
-
-    var x = 800;
-    var y = 400;
+function drawSceneInner(context, canvas)
+{
 
 
 
+
+}
+
+
+
+
+var mouseX = 0;
+var mouseY = 0;
+var mie = (navigator.appName == "Microsoft Internet Explorer") ? true : false;
+function mousePos (e) {
+    //
+    //if (!mie) {
+    //    if ( e ) {
+    //        mouseX = e.pageX;
+    //        mouseY = e.pageY;
+    //    }
+    //}
+    //else
+    //    mouseX = event.clientX + document.body.scrollLeft;
+    //mouseY = event.clientX + document.body.scrollTop;
+}
+
+function drawElephant(context, t,  x, y) {
+
+
+
+    //x = mouseX;
 
     context.beginPath();
     context.fillStyle = 'rgba(100, 100, 100, 1.0)';
@@ -272,4 +317,5 @@ function drawElephant(context) {
     context.strokeStyle = 'rgba(60, 60, 60, 0.2)';
     context.stroke();
 }
+
 
