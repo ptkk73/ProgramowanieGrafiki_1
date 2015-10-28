@@ -3,62 +3,85 @@
  */
 
 var VSHADER_SOURCE =
-    'precision mediump float;' +
-    'attribute vec3 vPos;' +
-    'void main() {\n' +
-    ' gl_Position = vec4(vPos * 100.0, 1.0) ; \n' +
-    '} \n';
+    'precision mediump float; \n' +
+    'uniform float time; \n' +
+    'attribute vec2 vPos; \n' +
+    'void main() { \n' +
+    ' gl_PointSize = 20.0 * abs(sin(time * 0.002)); \n' +
+    ' gl_Position = vec4(vPos * sin(time * 0.002), 0, 800.0 + sin(time * 0.0005) * 400.0) ;} \n'; //+
+    //'} \n';
 
 var FSHADER_SOURCE =
-    'precision mediump float;' +
+    'precision mediump float; \n' +
     'uniform float time; \n' +
-    'void main() {\n' +
-    ' gl_FragColor = vec4(sin(time), 1.0, 0.0, 1.0); \n' +
+    'void main() { \n' +
+    ' gl_FragColor = vec4(1.0, sin(time * 0.001) * 0.5 + 0.5, abs(sin(time * 0.002)), 1.0); \n' +
     '} \n';
+
 
 var time = 0.0;
 var uniform_time;
 var attribute_vPos;
 var gl;
 
-var triangleBuffer;
+var vBuffer;
 var shaderId;
-var triangleVerts =  [
-    0.5, 0.4, 0.0,
-    0.25, 0.8, 0.0,
-    0.75, 0.8, 0.0
+var pointVerts =  [
+    100, 200,
+    300, 100,
+    400, 700,
+    20, 500,
+    800, 300
 ];
 
-function buildTriangle() {
+function buildBuffer() {
 
-    triangleBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, triangleBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangleVerts), gl.STATIC_DRAW);
-    triangleBuffer.itemSize = 3;
-    triangleBuffer.numItems = 3;
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointVerts), gl.DYNAMIC_DRAW);
+    vBuffer.itemSize = 2;
+    vBuffer.numItems = 5;
 }
 
-function drawTriangle()
+function draw()
 {
-    gl.bindBuffer(gl.ARRAY_BUFFER, triangleBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
 
     gl.enableVertexAttribArray(attribute_vPos);
-    gl.vertexAttribPointer(attribute_vPos, triangleBuffer.itemSize, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.vertexAttribPointer(attribute_vPos, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.POINTS, 0, 5);
     gl.disableVertexAttribArray(attribute_vPos);
 }
 
+function randomizePoints()
+{
+    pointVerts = [];
+    for ( var i = 0; i < 5; i ++ )
+    {
+        pointVerts.push(Math.random() * 800.0);
+        pointVerts.push(Math.random() * 600.0);
+    }
+    buildBuffer();
+}
+
+
 function update()
 {
+    time += 16.666;
+    if ( Math.abs(Math.sin(time * 0.002)) < 0.01 )
+        randomizePoints();
+
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.clearColor(0.0, 0.0, 1.0, 1.0);
     gl.useProgram(shaderId);
 
+
     gl.uniform1f(uniform_time, time);
 
-    drawTriangle();
+    draw();
 
     gl.flush();
+
 
     window.requestAnimationFrame(update);
 }
@@ -87,6 +110,7 @@ function drawScene()
 
     gl.viewport(0, 0, canvas.width, canvas.height);
 
+
     var fShader = gl.createShader(gl.FRAGMENT_SHADER);
     gl.shaderSource(fShader, FSHADER_SOURCE);
     gl.compileShader(fShader);
@@ -109,8 +133,8 @@ function drawScene()
 
     uniform_time = gl.getUniformLocation(shaderId, "time");
     attribute_vPos = gl.getAttribLocation(shaderId, "vPos");
-
-    buildTriangle();
+    vBuffer = gl.createBuffer();
+    buildBuffer();
     window.requestAnimFrame = (function(callback) {
         return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
             function(callback) {
