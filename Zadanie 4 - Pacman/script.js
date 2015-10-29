@@ -9,7 +9,7 @@ var VSHADER_SOURCE =
     'uniform mat4 matrixMv; \n' +
     'attribute vec3 vPos; \n' +
     'void main() { \n' +
-    ' gl_Position = matrixProj * vec4( vPos.xy, -50, 1); } \n'; //+
+    ' gl_Position = matrixProj * vec4( vPos.xy + vec2( mPos.x, -mPos.y) * 0.01, -10, 1); } \n'; //+
     //'} \n';
 
 var FSHADER_SOURCE =
@@ -122,7 +122,7 @@ function drawGrid()
 
 function draw()
 {
-    drawGrid();
+    //drawGrid();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
 
