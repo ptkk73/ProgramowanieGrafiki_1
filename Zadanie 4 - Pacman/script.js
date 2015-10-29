@@ -7,9 +7,9 @@ var VSHADER_SOURCE =
     'uniform vec2 mPos; \n' +
     'uniform mat4 matrixProj; \n' +
     'uniform mat4 matrixMv; \n' +
-    'attribute vec2 vPos; \n' +
+    'attribute vec3 vPos; \n' +
     'void main() { \n' +
-    ' gl_Position =vec4( vPos.xy + vec2(mPos.x, -mPos.y), 0, 600); } \n'; //+
+    ' gl_Position = matrixProj * vec4( vPos.xy, -50, 1); } \n'; //+
     //'} \n';
 
 var FSHADER_SOURCE =
@@ -39,13 +39,14 @@ var pMatrix;
 var mvMatrix;
 
 var vBuffer;
+var gridBuffer;
 var shaderId;
 var pointVerts =  [
-    100, 200,
-    300, 100,
-    400, 700,
-    20, 500,
-    800, 300
+    100, 200, 0,
+    300, 100, 0,
+    400, 700, 0,
+    20, 500, 0,
+    800, 300, 0
 ];
 
 var pacmanVerts =  [];
@@ -55,37 +56,78 @@ function toRad(d)
     return d * Math.PI / 180.0;
 }
 
+function makePerspective(fieldOfViewInRadians, aspect, near, far) {
+    var f = Math.tan(Math.PI * 0.5 - 0.5 * fieldOfViewInRadians);
+    var rangeInv = 1.0 / (near - far);
+
+    return [
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (near + far) * rangeInv, -1,
+        0, 0, near * far * rangeInv * 2, 0
+    ];
+};
+
+function buildGridBuffer()
+{
+    pointVerts = [
+        -1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+
+        0.0, -1.0, 0.0,
+        0.0, 1.0, 0.0,
+
+        0.0, 0.0, -1.0,
+        0.0, 0.0, 1.0
+    ];
+    gl.bindBuffer(gl.ARRAY_BUFFER, gridBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pointVerts), gl.DYNAMIC_DRAW);
+    gridBuffer.itemSize = 3;
+    gridBuffer.numItems = 6;
+}
 
 function buildPacmanBuffer(time) {
 
     pacmanVerts = [];
-    pacmanVerts.push(0, 0);
+    pacmanVerts.push(0, 0, 0);
 
     var PRECISION = 300;
     var mouthDilationDeg = toRad(60.0 * Math.abs(Math.sin(time * 0.005)));
-    var startAngle = Math.atan2(cursorY - canvasy * 0.5, cursorX - canvasx * 0.5); //Math.PI * 0.5 + (mouthDilationDeg ) * 0.5;
+    var startAngle = Math.PI * 0.5 + (mouthDilationDeg ) * 0.5;
 
 
     for ( var i = 0; i < PRECISION; i ++)
     {
         var step = ( i * (Math.PI * 2.0 - mouthDilationDeg) / PRECISION);
         var currDeg = startAngle + step;
-        pacmanVerts.push(Math.sin(currDeg) * 100.0, Math.cos(currDeg) * 100.0);
+        pacmanVerts.push(Math.sin(currDeg), Math.cos(currDeg), 0 );
     }
 
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pacmanVerts), gl.DYNAMIC_DRAW);
-    vBuffer.itemSize = 2;
+    vBuffer.itemSize = 3;
     vBuffer.numItems = PRECISION + 1;
+}
+
+function drawGrid()
+{
+    gl.bindBuffer(gl.ARRAY_BUFFER, gridBuffer);
+
+    gl.enableVertexAttribArray(attribute_vPos);
+    gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, gridBuffer.numItems);
+    gl.disableVertexAttribArray(attribute_vPos);
 }
 
 function draw()
 {
+    drawGrid();
+
     gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
 
     gl.enableVertexAttribArray(attribute_vPos);
-    gl.vertexAttribPointer(attribute_vPos, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_FAN, 0, vBuffer.numItems);
     gl.disableVertexAttribArray(attribute_vPos);
 }
@@ -99,7 +141,6 @@ function update()
     gl.clearColor(0.0, 0.0, 1.0, 1.0);
     gl.useProgram(shaderId);
 
-
     gl.uniform1f(uniform_time, time);
     gl.uniform2f(uniform_mpos, cursorX - 669.0, cursorY - 550.0);
     gl.uniformMatrix4fv(uniform_matrixProj, false, modelViewPersp);
@@ -108,7 +149,6 @@ function update()
     draw();
 
     gl.flush();
-
 
     window.requestAnimationFrame(update);
 }
@@ -148,13 +188,13 @@ function drawScene()
     gl.viewport(0, 0, canvas.width, canvas.height);
 
     pMatrix = mat4.create();
+    mat4.identity(pMatrix);
     mvMatrix = mat4.create();
-
-    mat4.perspective(45, 4/3, 1, 100, pMatrix );
+    pMatrix = makePerspective(toRad(45.0), canvas.width / canvas.height, 0.1, 100.0);
 
     mat4.identity(mvMatrix); // Set to identity
-    mat4.translate(mvMatrix, [0, 0, 10]); // Translate back 10 units
-
+    //mat4.translate(mvMatrix, [0, 0, -100]); // Translate back 10 units
+    mat4.lookAt(mvMatrix, [0, 0, -100], [0, 0, 0], [0, 1, 0]);
     modelViewPersp = mat4.create();
 
     mat4.multiply(mvMatrix, pMatrix, modelViewPersp); // Sets modelViewPersp to modelView * persp
@@ -185,6 +225,8 @@ function drawScene()
     uniform_matrixProj = gl.getUniformLocation(shaderId, "matrixProj");
     uniform_matrixView =  gl.getUniformLocation(shaderId, "matrixMv");
 
+    gridBuffer = gl.createBuffer();
+    buildGridBuffer();
     vBuffer = gl.createBuffer();
     buildPacmanBuffer();
     window.requestAnimFrame = (function(callback) {
