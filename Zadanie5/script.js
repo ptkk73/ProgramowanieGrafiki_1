@@ -8,13 +8,17 @@ var VSHADER_SOURCE =
     'uniform mat4 matrixProj; \n' +
     'uniform mat4 matrixMv; \n' +
     'attribute vec3 vPos; \n' +
+    'attribute vec3 vCol; \n' +
+    //'varying vec3 varPos; \n' +
     'void main() { \n' +
-    ' gl_Position = matrixProj * matrixMv * vec4( vPos.xy  , 0, 1.0); } \n'; //+
+        //'varPos = vPos; \n'
+    ' gl_Position = matrixProj * matrixMv * vec4( vPos.xyz, 1.0); } \n'; //+
     //'} \n';
 
 var FSHADER_SOURCE =
     'precision mediump float; \n' +
     'uniform float time; \n' +
+    //'varying vec3 varPos; \n' +
     'void main() { \n' +
     ' gl_FragColor = vec4(1.0, sin(time * 0.001) * 0.5 + 0.5, abs(sin(time * 0.002)), 1.0); \n' +
     '} \n';
@@ -91,10 +95,26 @@ function buildGridBuffer()
     gridBuffer.numItems = 6;
 }
 
-function drawLine(x1, y1, x2, y2)
+function drawLine(x1, y1, z1, x2, y2, z2)
 {
     var lineBufV = []
-    lineBufV.push(x1, y1, 0, x2, y2, 0);
+    lineBufV.push(x1, y1, z1, x2, y2, z2);
+    var lineBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineBufV), gl.DYNAMIC_DRAW);
+    vBuffer.itemSize = 3;
+    vBuffer.numItems = 2;
+
+    gl.enableVertexAttribArray(attribute_vPos);
+    gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, 2);
+    gl.disableVertexAttribArray(attribute_vPos);
+}
+
+function drawLine(x1, y1, z1, x2, y2, z2, r, g, b, a)
+{
+    var lineBufV = []
+    lineBufV.push(x1, y1, z1, x2, y2, z2);
     var lineBuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineBufV), gl.DYNAMIC_DRAW);
@@ -161,8 +181,8 @@ function drawTriangle()
 {
     mat4.identity(mvMatrix);
     //mat4.translate(mvMatrix, [time * 0.0001 * 20, time * 0.0001 * 60, 0.0]);
-
-    mat4.rotate(mvMatrix, time * 0.001, [0.0, 0.0, 1.0 ]);
+    mat4.scale(mvMatrix, [1, 1, 1]);
+    mat4.rotate(mvMatrix, time * 0.001, [1.0, 0.0, 1.0 ]);
 
     gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
 
@@ -190,9 +210,10 @@ function draw()
     mat4.identity(mvMatrix);
     gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
 
-    drawLine(0, 0, 20, 60);
-    drawLine(20, 60, -20, 30);
-    drawLine(-20, 30, 0, 0);
+    drawLine(0, -10, 0, 0, 10, 0);
+    drawLine(-10, 0, 0, 10, 0, 0);
+    drawLine(0, 0, 10, 0, 0, -10);
+    //drawLine(-2, 3, 0, 0);
 }
 
 function update()
@@ -208,9 +229,11 @@ function update()
     gl.uniform2f(uniform_mpos, cursorX - 669.0, cursorY - 550.0);
 
     mat4.identity(modelViewPersp);
-    mat4.ortho( -200, 200, -150, 150, -1, 1, modelViewPersp);
-    mat4.scale(modelViewPersp, [Math.abs(Math.sin(time * 0.0004)) + Math.sin(time * 0.001) + 1.0,  + Math.sin(time * 0.001) + 1.0 , + Math.sin(time * 0.001) + 1.0]);
-    mat4.rotate(modelViewPersp, time * 0.0001, [0, 0, 1]);
+    mat4.perspective(45, canvasx / canvasy, 1, 300, modelViewPersp );
+    mat4.translate(modelViewPersp, [0, 0, -50]);
+    //mat4.ortho( -200, 200, -150, 150, -1, 1, modelViewPersp);
+    //mat4.scale(modelViewPersp, [Math.abs(Math.sin(time * 0.0004)) + Math.sin(time * 0.001) + 1.0,  + Math.sin(time * 0.001) + 1.0 , + Math.sin(time * 0.001) + 1.0]);
+    mat4.rotate(modelViewPersp, time * 0.0001, [1, 1, 1]);
 
 
     gl.uniformMatrix4fv(uniform_matrixProj, false, modelViewPersp);
