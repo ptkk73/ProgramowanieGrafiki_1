@@ -101,7 +101,7 @@ function initTextures() {
     cubeTexture = gl.createTexture();
     cubeImage = new Image();
     cubeImage.onload = function() { handleTextureLoaded(cubeImage, cubeTexture); }
-    cubeImage.src = "koal.jpg";
+    cubeImage.src = "pug.png";
 
     cubeImage2 = new Image();
     cubeImage2.onload = function() { handleTextureLoaded(cubeImage, cubeTexture); }
