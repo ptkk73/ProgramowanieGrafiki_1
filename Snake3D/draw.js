@@ -25,13 +25,14 @@ var FSHADER_SOURCE =
     'precision mediump float; \n' +
     'uniform float time; \n' +
     'uniform sampler2D tex; \n' +
+    'uniform sampler2D tex2; \n' +
     'uniform vec3 col; \n' +
     'uniform vec2 mPos; \n' +
     'uniform float isTexEnabled; \n' +
     'varying vec3 varCol; \n' +
     'varying vec2 varTex; \n' +
     'void main() { \n' +
-    ' gl_FragColor =  vec4(varCol * col, 1.0) * ( isTexEnabled > 0.0 ? texture2D(tex, varTex) : vec4(1)); \n' +
+    ' gl_FragColor =  vec4(varCol * col, 1.0) * ( isTexEnabled > 0.0 ? (texture2D(tex, varTex) * abs(cos(time * 0.001))) + (texture2D(tex2, varTex + vec2(sin(time * 0.001))) * abs(sin(time * 0.001))) : vec4(1)); \n' +
     '} \n';
 
 var cursorX = 0.0;
@@ -52,6 +53,8 @@ var attribute_vTex;
 var colorLocation;
 var gl;
 
+var cubeTexture2;
+
 var modelViewPersp;
 
 var pMatrix;
@@ -64,6 +67,7 @@ var vBufferBox;
 var vBufferTriangleLocation;
 
 var koalaTexture;
+var pugTexture;
 
 var gridBuffer;
 var shaderId;
@@ -101,12 +105,13 @@ function makePerspective(fieldOfViewInRadians, aspect, near, far) {
 
 function initTextures() {
     cubeTexture = gl.createTexture();
+    cubeTexture2 = gl.createTexture();
     cubeImage = new Image();
     cubeImage.onload = function() { handleTextureLoaded(cubeImage, cubeTexture); }
-    cubeImage.src = "pug.png";
+    cubeImage.src = "koal.jpg";
 
     cubeImage2 = new Image();
-    cubeImage2.onload = function() { handleTextureLoaded(cubeImage, cubeTexture); }
+    cubeImage2.onload = function() { handleTextureLoadedPug(cubeImage2, cubeTexture2); }
     cubeImage2.src = "pug.png";
 }
 
@@ -117,6 +122,17 @@ function handleTextureLoaded(image, texture) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
     gl.generateMipmap(gl.TEXTURE_2D);
     koalaTexture = texture;
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    //alert("done, " + texture);
+}
+
+function handleTextureLoadedPug(image, texture) {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    pugTexture = texture;
     gl.bindTexture(gl.TEXTURE_2D, null);
     //alert("done, " + texture);
 }
@@ -364,7 +380,7 @@ function drawPyramidRight()
 
 function drawBox(x, y, z, s, rx, ry, rz, a)
 {
-    gl.activeTexture(gl.GL_TEXTURE0);
+    //gl.activeTexture(gl.GL_TEXTURE0);
 
     mat4.identity(mvMatrix);
     //mat4.translate(mvMatrix, [time * 0.0001 * 20, time * 0.0001 * 60, 0.0]);
@@ -411,36 +427,64 @@ function drawPyramidFar()
     gl.disableVertexAttribArray(attribute_vPos);
 }
 
-function draw()
+function drawGridHelperScene()
 {
-    //drawGrid();
-
-    //gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
-    //
-    //gl.enableVertexAttribArray(attribute_vPos);
-    //gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 0, 0);
-    //gl.drawArrays(gl.TRIANGLE_FAN, 0, vBuffer.numItems);
-    //gl.disableVertexAttribArray(attribute_vPos);
-
-
-    mat4.identity(mvMatrix);
-    gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
-
     drawLine(0, -10, 0, 0, 10, 0    , 0, 1, 0);
     drawLine(-10, 0, 0, 10, 0, 0    , 1, 0, 0);
     drawLine(0, 0, 10, 0, 0, -10    , 0, 0, 1);
 
-    for ( var x = -100; x <= 100; x ++)
-        drawLine(x, -0.001, -100, x, -0.001, 100    , 0.4, 0.4, 0.4);
+    for ( var x = -10; x <= 10; x ++)
+        drawLine(x, -0.01, -10, x, -0.01, 10    , 0.4, 0.4, 0.4);
 
-    for ( var y = -100; y <= 100; y ++)
-        drawLine(-100, -0.001, y, 100, -0.001, y    , 0.4, 0.4, 0.4);
+    for ( var y = -10; y <= 10; y ++)
+        drawLine(-10, -0.01, y, 10, -0.01, y    , 0.4, 0.4, 0.4);
 
     //drawTriangle();
     drawPyramidUp();
     drawPyramidRight();
     drawPyramidFar();
+}
+function drawPlayGround()
+{
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D,koalaTexture);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, pugTexture);
+    //gl.glActiveTexture(0);
+    //if ( Math.abs(Math.sin(time * 0.01)) * 1000 > 500 )
+    //    gl.bindTexture(gl.TEXTURE_2D, koalaTexture);
+    //else
+    //    gl.bindTexture(gl.TEXTURE_2D, pugTexture);
+    var WIDTH = 20;
+    var HEIGHT = 20;
+    var LENGTH = 10;
+    var SIZE = 0.125 * Math.abs( Math.sin(time * 0.001) ) * 4 + 0.45;
 
+    for (var x = 0; x < WIDTH; x++) {
+        for (var y = 0; y < HEIGHT; y++) {
+            if (x == 0 || x == WIDTH - 1) {
+                for ( var l = 0; l < LENGTH; l ++ ) {
+                    drawBox((x - WIDTH * 0.5) * SIZE * 4, l * SIZE * 4* Math.sin(time * 0.001 + y) * 10, (y - HEIGHT * 0.5 ) * SIZE * 4, SIZE, 0, 1, 1, -y * time * 0.0001);
+                }
+            }
+            else if (y == HEIGHT - 1 || y == 0) {
+                for ( var l = 0; l < 10; l ++ ) {
+                    drawBox((x - WIDTH * 0.5) * SIZE * 4,  l * SIZE * 4 * Math.sin( time * 0.001 + x) * 10, (y - HEIGHT * 0.5 ) * SIZE * 4, SIZE, 0, 1, 1, -x * time * 0.0001);
+                }
+            }
+        }
+    }
+}
+
+function draw()
+{
+    mat4.identity(mvMatrix);
+    gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
+
+    drawGridHelperScene();
+    drawPlayGround();
+
+    drawBox(0 + (cursorX - innerWidth * 0.5)* 0.002, 40, 0 + (cursorY - innerHeight * 0.5)* 0.002, 3, 0, 0, 0);
 }
 
 function update()
@@ -457,11 +501,12 @@ function update()
 
     mat4.identity(modelViewPersp);
     mat4.perspective(45, canvasx / canvasy, 1, 300, modelViewPersp );
-    mat4.translate(modelViewPersp, [xTranslation, yTranslation, -30 + zTranslation]);
+    mat4.translate(modelViewPersp, [xTranslation, yTranslation, -150 + zTranslation]);
     //mat4.ortho( -200, 200, -150, 150, -1, 1, modelViewPersp);
     //mat4.scale(modelViewPersp, [Math.abs(Math.sin(time * 0.0004)) + Math.sin(time * 0.001) + 1.0,  + Math.sin(time * 0.001) + 1.0 , + Math.sin(time * 0.001) + 1.0]);
-    mat4.rotate(modelViewPersp, 0.19, [1, 0, 0]);
-    mat4.rotate(modelViewPersp, time * 0.001, [0, 1, 0]);
+    //mat4.rotate(modelViewPersp, 0.19, [1, 0, 0]);
+    mat4.rotate(modelViewPersp, Math.PI * 0.5, [1, 0, 0]);
+    mat4.rotate(modelViewPersp, time * 0.0005, [0, 1, 0]);
 
 
     gl.uniformMatrix4fv(uniform_matrixProj, false, modelViewPersp);
@@ -573,6 +618,9 @@ function drawScene()
     vBufferTriangle = gl.createBuffer();
     vBufferPyramid = gl.createBuffer();
     vBufferBox = gl.createBuffer();
+
+    gl.uniform1i(gl.getUniformLocation(shaderId, "tex"), 0);  // texture unit 0
+    gl.uniform1i(gl.getUniformLocation(shaderId, "tex2"), 1);  // texture unit 1
 
     buildPyramidBuffer();
     buildBox();
