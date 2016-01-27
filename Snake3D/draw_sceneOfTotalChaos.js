@@ -7,24 +7,16 @@ var VSHADER_SOURCE =
     'uniform vec2 mPos; \n' +
     'uniform mat4 matrixProj; \n' +
     'uniform mat4 matrixMv; \n' +
-
     'attribute vec3 vPos; \n' +
     'attribute vec3 vColor; \n' +
-    'attribute vec3 vNormal; \n' +
     'attribute vec2 vTex; \r\n' +
     'varying vec2 varTex; \n' +
-    'varying vec3 varPos; \n' +
     'varying vec3 varCol; \n' +
-    'varying vec3 varNormal; \n' +
     'void main() { \n' +
-    'vec4 xxx = matrixProj * matrixMv * vec4( vPos.xyz, 1); \n' +
 
-    ' gl_Position =  matrixProj * matrixMv * vec4( vPos.xyz, 1); \r\n' +
-    'vec4 xxxx = matrixProj * matrixMv *  vec4(vPos.xyz, 1);' +
-    'varPos = vec3(xxxx.x, xxxx.y, xxxx.z); \n' +
+    ' gl_Position = matrixProj * matrixMv * vec4( vPos.xyz, 1.0); \r\n' +
     'varCol = vColor; \n' +
     'varTex = vTex; \n' +
-    'varNormal = vNormal; \n' +
     '} \n'; //+
 //'} \n';
 
@@ -33,50 +25,14 @@ var FSHADER_SOURCE =
     'precision mediump float; \n' +
     'uniform float time; \n' +
     'uniform sampler2D tex; \n' +
+    'uniform sampler2D tex2; \n' +
     'uniform vec3 col; \n' +
     'uniform vec2 mPos; \n' +
     'uniform float isTexEnabled; \n' +
     'varying vec3 varCol; \n' +
-    'varying vec3 varPos; \n' +
     'varying vec2 varTex; \n' +
-    'varying vec3 varNormal; \n' +
-    'uniform vec3 u_LightColor;\n' +     // Light color
-    'uniform vec3 u_LightPosition;\n' +  // Position of the light source
-    'uniform vec3 u_AmbientLight;\n' +   // Ambient light color
     'void main() { \n' +
-
-    'vec3 lightPosition = vec3(mPos.x * 0.25, 0, -100); \n' +
-    'vec4 ambient = vec4(u_AmbientLight, 1); \n' +
-    'vec4 diffuse = vec4(u_LightColor, 1); \n' +
-    'vec4 specular = vec4(1, 1, 1, 1); \n' +
-    'float shininess = 4.0; \n' +
-
-    'vec3 L = normalize(lightPosition - varPos); \n' +
-    'vec3 E = normalize(-varPos); // we are in Eye Coordinates, so EyePos is (0,0,0) \n' +
-    'vec3 R = normalize(-reflect(L,varNormal)); \n' +
-
-    'vec4 Iamb = ambient; \n' +
-
-    'vec4 Idiff = diffuse * max(dot(varNormal,L), 0.0); \n' +
-    'Idiff = clamp(Idiff, 0.0, 1.0); \n' +
-
-        // calculate Specular Term:
-    'vec4 Ispec = specular * pow(max(dot(R,E),0.0), 1.4 * shininess); \n' +
-    'Ispec = clamp(Ispec, 0.0, 1.0) * 1.2; \n' +
-        // write Total Color:
-
-    'vec4 texColor = vec4(col, 1) * texture2D(tex, varTex); \n' +
-    'vec4 finalColor = texColor *( Iamb + ( Idiff * 0.2 + Ispec )  ); \n' +
-        'float grayscale = (finalColor.x + finalColor.y + finalColor.z) / 3.0; \n' +
-    'vec3 invertColor = vec3(1.0 - finalColor.x, 1.0 -  finalColor.y, 1.0 - finalColor.z); \n' +
-    'float specVal = (Ispec.x + Ispec.y + Ispec.z) / 3.0; \n' +
-        ' if ( isTexEnabled > 0.0 ) \n '+
-    'gl_FragColor = vec4(finalColor.x * specVal + grayscale * ( 1.0 - specVal),finalColor.y * specVal + grayscale * ( 1.0 - specVal),finalColor.z * specVal + grayscale * ( 1.0 - specVal), 1); \n' +
-
-    ' else \n '+
-    'gl_FragColor = vec4(finalColor.x, finalColor.y, finalColor.z, 1); \n' +
-        //'gl_FragColor = vec4(varCol, 1.0); \n' +
-        //' gl_FragColor =  vec4(varCol * col, 1.0) * ( isTexEnabled > 0.0 ?  : vec4(1)); \n' +
+    ' gl_FragColor =  vec4(varCol * col, 1.0) * ( isTexEnabled > 0.0 ? (texture2D(tex, varTex) * abs(cos(time * 0.001))) + (texture2D(tex2, varTex + vec2(sin(time * 0.001))) * abs(sin(time * 0.001))) : vec4(1)); \n' +
     '} \n';
 
 var cursorX = 0.0;
@@ -91,14 +47,13 @@ var uniform_mpos;
 var uniform_matrixProj;
 var uniform_matrixView;
 var uniform_texEnabled;
-var uniform_lightPos;
-var uniform_lightColor;
-var uniform_ambientColor;
 var attribute_vPos;
 var attribute_vColor;
 var attribute_vTex;
 var colorLocation;
 var gl;
+
+var cubeTexture2;
 
 var modelViewPersp;
 
@@ -113,9 +68,7 @@ var vBufferTriangleLocation;
 
 var koalaTexture;
 var pugTexture;
-var rockTexture;
 
-var attribute_vNormal;
 var gridBuffer;
 var shaderId;
 var pointVerts =  [
@@ -126,8 +79,10 @@ var pointVerts =  [
     800, 300, 0, 1, 1, 1,0, 0,
 ];
 
-var pacmanVerts =  [];
-var triangleVerts =  [];
+var xTranslation = 0;
+var yTranslation = 0;
+var zTranslation = 0;
+
 var pyramidVerts =  [];
 var boxVerts =  [];
 
@@ -150,21 +105,15 @@ function makePerspective(fieldOfViewInRadians, aspect, near, far) {
 
 function initTextures() {
     cubeTexture = gl.createTexture();
+    cubeTexture2 = gl.createTexture();
     cubeImage = new Image();
     cubeImage.onload = function() { handleTextureLoaded(cubeImage, cubeTexture); }
-    cubeImage.src = "pugstuff.jpg";
+    cubeImage.src = "koal.jpg";
 
-    cubeTexture2 = gl.createTexture();
     cubeImage2 = new Image();
-    cubeImage2.onload = function() { handleTextureLoaded2(cubeImage2, cubeTexture2); }
-    cubeImage2.src = "koal.jpg";
-
-    cubeTexture3 = gl.createTexture();
-    cubeImage3 = new Image();
-    cubeImage3.onload = function() { handleTextureLoaded3(cubeImage3, cubeTexture3); }
-    cubeImage3.src = "rocks.jpg";
+    cubeImage2.onload = function() { handleTextureLoadedPug(cubeImage2, cubeTexture2); }
+    cubeImage2.src = "pug.png";
 }
-
 
 function handleTextureLoaded(image, texture) {
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -177,25 +126,13 @@ function handleTextureLoaded(image, texture) {
     //alert("done, " + texture);
 }
 
-
-function handleTextureLoaded2(image, texture) {
+function handleTextureLoadedPug(image, texture) {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
     gl.generateMipmap(gl.TEXTURE_2D);
     pugTexture = texture;
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    //alert("done, " + texture);
-}
-
-function handleTextureLoaded3(image, texture) {
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    rockTexture = texture;
     gl.bindTexture(gl.TEXTURE_2D, null);
     //alert("done, " + texture);
 }
@@ -239,6 +176,46 @@ function drawLine(x1, y1, z1, x2, y2, z2, r, g, b)
     gl.disableVertexAttribArray(attribute_vPos);
 }
 
+
+function buildPacmanBuffer(time) {
+
+    pacmanVerts = [];
+    pacmanVerts.push(0, 0, 0);
+
+    var PRECISION = 300;
+    var mouthDilationDeg = toRad(60.0 * Math.abs(Math.sin(time * 0.005)));
+    var startAngle = Math.PI * 0.5 + (mouthDilationDeg ) * 0.5;
+
+
+    for ( var i = 0; i < PRECISION; i ++)
+    {
+        var step = ( i * (Math.PI * 2.0 - mouthDilationDeg) / PRECISION);
+        var currDeg = startAngle + step;
+        pacmanVerts.push(Math.sin(currDeg), Math.cos(currDeg), 0 );
+    }
+
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pacmanVerts), gl.DYNAMIC_DRAW);
+    vBuffer.itemSize = 3;
+    vBuffer.numItems = PRECISION + 1;
+}
+
+function buildTriangleBuffer(time) {
+
+    triangleVerts = [];
+    triangleVerts.push(0, 1, 0, 1, 0, 1, 0, 0);
+    triangleVerts.push(0.5, -1, 0, 1, 1, 0, 0, 1);
+    triangleVerts.push(-0.5, -1, 0, 0, 1, 1, 1, 1);
+
+
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vBufferTriangle);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangleVerts), gl.DYNAMIC_DRAW);
+    vBufferTriangle.itemSize = 8;
+    vBufferTriangle.numItems = 3;
+}
+
 function buildPyramidBuffer(time) {
 
     pyramidVerts = [];
@@ -265,69 +242,79 @@ function buildPyramidBuffer(time) {
     vBufferPyramid.itemSize = 8;
     vBufferPyramid.numItems = 3 * 4;
 }
+function buildSphere()
+{
+    var sphereVerts = [];
+
+    for ( var i = -10; i <= 10; i ++ )
+    {
+
+    }
+
+}
 
 function buildBox() {
 
     boxVerts = [];
 
     // front / rear
-    boxVerts.push(-1, -1, 1,1, 1, 1, 0, 1, 0, 0, -1);
-    boxVerts.push(-1, 1, 1,1, 1, 1, 0, 0, 0, 0, -1);
-    boxVerts.push(1, 1, 1,1, 1, 1, 1, 0, 0, 0, -1);
+    boxVerts.push(-1, -1, 1,1, 1, 0, 0, 1);
+    boxVerts.push(-1, 1, 1,1, 1, 0, 0, 0);
+    boxVerts.push(1, 1, 1,1, 1, 0, 1, 0);
 
 
-    boxVerts.push(1, 1, 1,1, 1, 1, 1, 0, 0, 0, -1);
-    boxVerts.push(1, -1, 1,1, 1, 1, 1, 1, 0, 0, -1);
-    boxVerts.push(-1, -1, 1,1, 1, 1, 0, 1, 0, 0, -1);
+    boxVerts.push(1, 1, 1,1, 1, 0, 1, 0);
+    boxVerts.push(1, -1, 1,1, 1, 0, 1, 1);
+    boxVerts.push(-1, -1, 1,1, 1, 0, 0, 1);
 
-    boxVerts.push(-1, -1, -1,1, 1, 1, 0, 1, 0, 0, -1);
-    boxVerts.push(-1, 1, -1,1, 1, 1, 0, 0, 0, 0, -1);
-    boxVerts.push(1, 1, -1,1, 1, 1, 1, 0, 0, 0, -1);
+    boxVerts.push(-1, -1, -1,1, 1, 0, 0, 1);
+    boxVerts.push(-1, 1, -1,1, 1, 0, 0, 0);
+    boxVerts.push(1, 1, -1,1, 1, 0, 1, 0);
 
 
-    boxVerts.push(1, 1, -1,1, 1, 1, 1, 0, 0, 0, -1);
-    boxVerts.push(1, -1, -1,1, 1, 1, 1, 1, 0, 0, -1);
-    boxVerts.push(-1, -1, -1,1, 1, 1, 0, 1, 0, 0, -1);
+    boxVerts.push(1, 1, -1,1, 1, 0, 1, 0);
+    boxVerts.push(1, -1, -1,1, 1, 0, 1, 1);
+    boxVerts.push(-1, -1, -1,1, 1, 0, 0, 1);
 
 
     // right/left
-    boxVerts.push(1, 1, 1,1, 1, 1, 0, 1, 0, 0, -1);
-    boxVerts.push(1, 1, -1,1, 1, 1, 0, 0, 0, 0, -1);
-    boxVerts.push(1, -1, -1,1, 1, 1, 1, 0, 0, 0, -1);
+    boxVerts.push(1, 1, 1,1, 0, 1, 0, 1);
+    boxVerts.push(1, 1, -1,1, 0, 1, 0, 0);
+    boxVerts.push(1, -1, -1,1, 0, 1, 1, 0);
 
-    boxVerts.push(1, -1, -1,1, 1, 1, 1, 0, 0, 0, -1);
-    boxVerts.push(1, -1, 1,1, 1, 1, 1, 1, 0, 0, -1);
-    boxVerts.push(1, 1, 1,1, 1, 1, 0, 1, 0, 0, -1);
+    boxVerts.push(1, -1, -1,1, 0, 1, 1, 0);
+    boxVerts.push(1, -1, 1,1, 0, 1, 1, 1);
+    boxVerts.push(1, 1, 1,1, 0, 1, 0, 1);
 
-    boxVerts.push(-1, 1, 1,1, 1, 1, 0, 1, 0, 0, -1);
-    boxVerts.push(-1, 1, -1,1, 1, 1, 0, 0, 0, 0, -1);
-    boxVerts.push(-1, -1, -1,1, 1, 1, 1, 0, 0, 0, -1);
+    boxVerts.push(-1, 1, 1,1, 0, 1, 0, 1);
+    boxVerts.push(-1, 1, -1,1, 0, 1, 0, 0);
+    boxVerts.push(-1, -1, -1,1, 0, 1, 1, 0);
 
-    boxVerts.push(-1, -1, -1,1, 1, 1, 1, 0, 0, 0, -1);
-    boxVerts.push(-1, -1, 1,1, 1, 1, 1, 1, 0, 0, -1);
-    boxVerts.push(-1, 1, 1,1, 1, 1, 0, 1, 0, 0, -1);
+    boxVerts.push(-1, -1, -1,1, 0, 1, 1, 0);
+    boxVerts.push(-1, -1, 1,1, 0, 1, 1, 1);
+    boxVerts.push(-1, 1, 1,1, 0, 1, 0, 1);
 
     // top bottom
-    boxVerts.push(1, 1, 1,1, 1, 1, 0, 1, 0, 0, 1);
-    boxVerts.push(1, 1, -1,1, 1, 1, 0, 0, 0, 0, 1);
-    boxVerts.push(-1, 1, -1,1, 1, 1, 1, 0, 0, 0, 1);
+    boxVerts.push(1, 1, 1,0, 1, 1, 0, 1);
+    boxVerts.push(1, 1, -1,0, 1, 1, 0, 0);
+    boxVerts.push(-1, 1, -1,0, 1, 1, 1, 0);
 
-    boxVerts.push(-1, 1, -1,1, 1, 1, 1, 0, 0, 0, 1);
-    boxVerts.push(-1, 1, 1,1, 1, 1, 1, 1, 0, 0, 1);
-    boxVerts.push(1, 1, 1,1, 1, 1, 0, 1, 0, 0, 1);
+    boxVerts.push(-1, 1, -1,0, 1, 1, 1, 0);
+    boxVerts.push(-1, 1, 1,0, 1, 1, 1, 1);
+    boxVerts.push(1, 1, 1,0, 1, 1, 0, 1);
 
-    boxVerts.push(1, -1, 1,1, 1, 1, 0, 1, 0, 0, -1);
-    boxVerts.push(1, -1, -1,1, 1, 1, 0, 0, 0, 0, -1);
-    boxVerts.push(-1, -1, -1,1, 1, 1, 1, 0, 0, 0, -1);
+    boxVerts.push(1, -1, 1,0, 1, 1, 0, 1);
+    boxVerts.push(1, -1, -1,0, 1, 1, 0, 0);
+    boxVerts.push(-1, -1, -1,0, 1, 1, 1, 0);
 
-    boxVerts.push(-1, -1, -1,1, 1, 1, 1, 0, 0, 0, -1);
-    boxVerts.push(-1, -1, 1,1, 1, 1, 1, 1, 0, 0, -1);
-    boxVerts.push(1, -1, 1,1, 1, 1, 0, 1, 0, 0, -1);
+    boxVerts.push(-1, -1, -1,0, 1, 1, 1, 0);
+    boxVerts.push(-1, -1, 1,0, 1, 1, 1, 1);
+    boxVerts.push(1, -1, 1,0, 1, 1, 0, 1);
 
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vBufferBox);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(boxVerts), gl.DYNAMIC_DRAW);
-    vBufferBox.itemSize = 11;
+    vBufferBox.itemSize = 8;
     vBufferBox.numItems = 3 * 12 ;
 }
 
@@ -338,9 +325,6 @@ function drawGrid()
     gl.enableVertexAttribArray(attribute_vPos);
     gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 8 * 4, 0);
     gl.enableVertexAttribArray(attribute_vColor);
-    gl.uniform3f(uniform_lightPos, 0, 0, 0);
-    gl.uniform3f(uniform_lightColor, 1, 1, 1);
-    gl.uniform3f(uniform_ambientColor, 1.0, 1.0, 1.0);
 
     gl.vertexAttribPointer(attribute_vColor, 3, gl.FLOAT, false, 8 * 4, 3 * 4);
     gl.enableVertexAttribArray(attribute_vTex);
@@ -361,9 +345,6 @@ function drawPyramidUp()
     gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
     gl.uniform1f(uniform_texEnabled, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, vBufferPyramid);
-    gl.uniform3f(uniform_lightPos, 0, 0, 0);
-    gl.uniform3f(uniform_lightColor, 1, 1, 1);
-    gl.uniform3f(uniform_ambientColor, 1.0, 1.0, 1.0);
 
     gl.enableVertexAttribArray(attribute_vPos);
     gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 8 * 4, 0);
@@ -385,11 +366,6 @@ function drawPyramidRight()
     gl.uniform3f(colorLocation, 1, 0, 0);
     gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
     gl.uniform1f(uniform_texEnabled, 0);
-
-    gl.uniform3f(uniform_lightPos, 0, 0, 0);
-    gl.uniform3f(uniform_lightColor, 1, 1, 1);
-    gl.uniform3f(uniform_ambientColor, 1.0, 1.0, 1.0);
-
     gl.bindBuffer(gl.ARRAY_BUFFER, vBufferPyramid);
 
     gl.enableVertexAttribArray(attribute_vPos);
@@ -402,7 +378,7 @@ function drawPyramidRight()
     gl.disableVertexAttribArray(attribute_vPos);
 }
 
-function drawBox(x, y, z, s, rx, ry, rz, a, lx, ly, lz)
+function drawBox(x, y, z, s, rx, ry, rz, a)
 {
     //gl.activeTexture(gl.GL_TEXTURE0);
 
@@ -411,29 +387,21 @@ function drawBox(x, y, z, s, rx, ry, rz, a, lx, ly, lz)
     mat4.scale(mvMatrix, [s, s, s]);
     mat4.translate(mvMatrix, [x, y, z, 0.0 ]);
     mat4.rotate(mvMatrix, a, [rx, ry, rz ]);
-    gl.uniform3f(colorLocation, 1, 1, 1);
+    gl.uniform3f(colorLocation, 0.6, 0.4, 0.8);
     gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
     gl.uniform1f(uniform_texEnabled, 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, vBufferBox);
 
-
-    gl.uniform3f(uniform_lightPos, lx, ly, lz);
-    gl.uniform3f(uniform_lightColor, 1, 1, 1);
-    gl.uniform3f(uniform_ambientColor, 0.1, 0.1, 0.1);
-
     gl.enableVertexAttribArray(attribute_vPos);
-    gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 11 * 4, 0);
+    gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 8 * 4, 0);
     gl.enableVertexAttribArray(attribute_vColor);
-    gl.vertexAttribPointer(attribute_vColor, 3, gl.FLOAT, false, 11 * 4, 3 * 4);
+    gl.vertexAttribPointer(attribute_vColor, 3, gl.FLOAT, false, 8 * 4, 3 * 4);
     gl.enableVertexAttribArray(attribute_vTex);
-    gl.vertexAttribPointer(attribute_vTex, 2, gl.FLOAT, false, 11 * 4, 6 * 4);
-    gl.enableVertexAttribArray(attribute_vNormal);
-    gl.vertexAttribPointer(attribute_vNormal, 3, gl.FLOAT, false, 11 * 4, 8 * 4);
+    gl.vertexAttribPointer(attribute_vTex, 2, gl.FLOAT, false, 8 * 4, 6 * 4);
     gl.drawArrays(gl.TRIANGLES, 0, vBufferBox.numItems);
     gl.disableVertexAttribArray(attribute_vPos);
     gl.disableVertexAttribArray(attribute_vColor);
     gl.disableVertexAttribArray(attribute_vTex);
-    gl.disableVertexAttribArray(attribute_vNormal);
 }
 
 function drawPyramidFar()
@@ -447,9 +415,6 @@ function drawPyramidFar()
     gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
     gl.uniform1f(uniform_texEnabled, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, vBufferPyramid);
-    gl.uniform3f(uniform_lightPos, 0, 0, 0);
-    gl.uniform3f(uniform_lightColor, 1, 1, 1);
-    gl.uniform3f(uniform_ambientColor, 1.0, 1.0, 1.0);
 
     gl.enableVertexAttribArray(attribute_vPos);
     gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 8 * 4, 0);
@@ -462,64 +427,64 @@ function drawPyramidFar()
     gl.disableVertexAttribArray(attribute_vPos);
 }
 
-function draw()
+function drawGridHelperScene()
 {
-    //drawGrid();
-
-    //gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
-    //
-    //gl.enableVertexAttribArray(attribute_vPos);
-    //gl.vertexAttribPointer(attribute_vPos, 3, gl.FLOAT, false, 0, 0);
-    //gl.drawArrays(gl.TRIANGLE_FAN, 0, vBuffer.numItems);
-    //gl.disableVertexAttribArray(attribute_vPos);
-
-
-    mat4.identity(mvMatrix);
-    gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
-
     drawLine(0, -10, 0, 0, 10, 0    , 0, 1, 0);
     drawLine(-10, 0, 0, 10, 0, 0    , 1, 0, 0);
     drawLine(0, 0, 10, 0, 0, -10    , 0, 0, 1);
 
     for ( var x = -10; x <= 10; x ++)
-        drawLine(x, -0.001, -10, x, -0.001, 10    , 0.4, 0.4, 0.4);
+        drawLine(x, -0.01, -10, x, -0.01, 10    , 0.4, 0.4, 0.4);
 
     for ( var y = -10; y <= 10; y ++)
-        drawLine(-10, -0.001, y, 10, -0.001, y    , 0.4, 0.4, 0.4);
+        drawLine(-10, -0.01, y, 10, -0.01, y    , 0.4, 0.4, 0.4);
 
     //drawTriangle();
     drawPyramidUp();
     drawPyramidRight();
     drawPyramidFar();
-
-    var boxX = -Math.abs(Math.sin(time * 0.001) * 1.8 + 0.7) * 150.0;
-    var boxY = Math.sin(time * 0.001) * 150.0;
-    var boxZ = -Math.abs(Math.cos(time * 0.001)) * 150.0;
-
-    //drawBox(boxX, 10, boxZ, 0.1, 0, 0, 0, 0, boxX, 10, boxZ);
-
-    gl.bindTexture(gl.TEXTURE_2D, rockTexture);
-    drawBox(0, 0, 0, 50, 0, 1, 0, 0, boxX, 10, boxZ);
-
-
-    var lightPosX = Math.sin(time * 0.002) * 2.71;
-    var lightPosY = Math.cos(time * 0.002) * 2.71;
-
-    var pos1x = Math.sin(time * 0.001) * 2.5;
-    var pos2x =  -Math.cos(time * 0.001) * 2.5;
-
-    gl.bindTexture(gl.TEXTURE_2D, koalaTexture);
-    drawBox(pos1x , 0 , pos2x, 4, 0, 1, 0, time * 0.001, boxX , 10, boxZ );
-
+}
+function drawPlayGround()
+{
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D,koalaTexture);
+    gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, pugTexture);
-    drawBox(pos1x + lightPosX, 0, pos2x + lightPosY, 4, 0, 0, 0, 0, boxX, 10, boxZ);
+    //gl.glActiveTexture(0);
+    //if ( Math.abs(Math.sin(time * 0.01)) * 1000 > 500 )
+    //    gl.bindTexture(gl.TEXTURE_2D, koalaTexture);
+    //else
+    //    gl.bindTexture(gl.TEXTURE_2D, pugTexture);
+    var WIDTH = 20;
+    var HEIGHT = 20;
+    var LENGTH = 10;
+    var SIZE = 0.125 * Math.abs( Math.sin(time * 0.001) ) * 4 + 0.45;
 
+    for (var x = 0; x < WIDTH; x++) {
+        for (var y = 0; y < HEIGHT; y++) {
+            if (x == 0 || x == WIDTH - 1) {
+                for ( var l = 0; l < LENGTH; l ++ ) {
+                    drawBox((x - WIDTH * 0.5) * SIZE * 4, l * SIZE * 4* Math.sin(time * 0.001 + y) * 10, (y - HEIGHT * 0.5 ) * SIZE * 4, SIZE, 0, 1, 1, -y * time * 0.0001);
+                }
+            }
+            else if (y == HEIGHT - 1 || y == 0) {
+                for ( var l = 0; l < 10; l ++ ) {
+                    drawBox((x - WIDTH * 0.5) * SIZE * 4,  l * SIZE * 4 * Math.sin( time * 0.001 + x) * 10, (y - HEIGHT * 0.5 ) * SIZE * 4, SIZE, 0, 1, 1, -x * time * 0.0001);
+                }
+            }
+        }
+    }
+}
 
+function draw()
+{
+    mat4.identity(mvMatrix);
+    gl.uniformMatrix4fv(uniform_matrixView, false, mvMatrix);
 
+    drawGridHelperScene();
+    drawPlayGround();
 
-    //gl.bindTexture(gl.TEXTURE_2D, koalaTexture  + 1);
-    //for ( var c = 0; c < 10; c ++ )
-    //    drawBox( Math.sin(time * 0.001 + c) * (c - 5) * 5.0,  (c - 5) * 5, Math.cos(time * 0.001) * (c - 5) * 5.0, 1 * Math.cos(time * 0.001 + c), 1, 1, 1, time * 0.001 + c);
+    drawBox(0 + (cursorX - innerWidth * 0.5)* 0.002, 40, 0 + (cursorY - innerHeight * 0.5)* 0.002, 3, 0, 0, 0);
 }
 
 function update()
@@ -536,11 +501,12 @@ function update()
 
     mat4.identity(modelViewPersp);
     mat4.perspective(45, canvasx / canvasy, 1, 300, modelViewPersp );
-    mat4.translate(modelViewPersp, [0, 0, -30]);
+    mat4.translate(modelViewPersp, [xTranslation, yTranslation, -150 + zTranslation]);
     //mat4.ortho( -200, 200, -150, 150, -1, 1, modelViewPersp);
     //mat4.scale(modelViewPersp, [Math.abs(Math.sin(time * 0.0004)) + Math.sin(time * 0.001) + 1.0,  + Math.sin(time * 0.001) + 1.0 , + Math.sin(time * 0.001) + 1.0]);
-    mat4.rotate(modelViewPersp, 0.30, [1, 0, 0]);
-    mat4.rotate(modelViewPersp, time * 0.0001, [0, 1, 0]);
+    //mat4.rotate(modelViewPersp, 0.19, [1, 0, 0]);
+    mat4.rotate(modelViewPersp, Math.PI * 0.5, [1, 0, 0]);
+    mat4.rotate(modelViewPersp, time * 0.0005, [0, 1, 0]);
 
 
     gl.uniformMatrix4fv(uniform_matrixProj, false, modelViewPersp);
@@ -573,6 +539,17 @@ function drawScene()
         return;
     }
 
+    document.onkeydown = function(ev)
+    {
+        if ( ev.keyCode == 39 )
+            xTranslation += 0.1;
+        if ( ev.keyCode == 37 )
+            xTranslation -= 0.1;
+        if ( ev.keyCode == 38 )
+            yTranslation += 0.1;
+        if ( ev.keyCode == 40 )
+            yTranslation -= 0.1;
+    }
 
     document.onmousemove = function(e){
         cursorX = e.pageX;
@@ -631,20 +608,20 @@ function drawScene()
     attribute_vPos = gl.getAttribLocation(shaderId, "vPos");
     attribute_vColor = gl.getAttribLocation(shaderId, "vColor");
     attribute_vTex = gl.getAttribLocation(shaderId, "vTex");
-    attribute_vNormal = gl.getAttribLocation(shaderId, "vNormal");
     uniform_mpos = gl.getUniformLocation(shaderId, "mPos");
     uniform_matrixProj = gl.getUniformLocation(shaderId, "matrixProj");
     uniform_matrixView =  gl.getUniformLocation(shaderId, "matrixMv");
     uniform_texEnabled = gl.getUniformLocation(shaderId, "isTexEnabled");
-    uniform_lightPos = gl.getUniformLocation(shaderId, "u_LightPosition");
-    uniform_lightColor = gl.getUniformLocation(shaderId, "u_LightColor");
-    uniform_ambientColor = gl.getUniformLocation(shaderId, "u_AmbientLight");
     gridBuffer = gl.createBuffer();
     //buildGridBuffer();
     vBuffer = gl.createBuffer();
     vBufferTriangle = gl.createBuffer();
     vBufferPyramid = gl.createBuffer();
     vBufferBox = gl.createBuffer();
+
+    gl.uniform1i(gl.getUniformLocation(shaderId, "tex"), 0);  // texture unit 0
+    gl.uniform1i(gl.getUniformLocation(shaderId, "tex2"), 1);  // texture unit 1
+
     buildPyramidBuffer();
     buildBox();
     initTextures();
