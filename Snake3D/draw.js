@@ -49,7 +49,7 @@ var FSHADER_SOURCE =
     'vec4 ambient = vec4(u_AmbientLight, 1); \n' +
     'vec4 diffuse = vec4(u_LightColor, 1); \n' +
     'vec4 specular = vec4(1, 1, 1, 1); \n' +
-    'float shininess = 4.0; \n' +
+    'float shininess = 3.0; \n' +
 
     'vec3 L = normalize(lightPosition - varPos); \n' +
     'vec3 E = normalize(-varPos); // we are in Eye Coordinates, so EyePos is (0,0,0) \n' +
@@ -64,12 +64,13 @@ var FSHADER_SOURCE =
     'vec4 Ispec = specular * pow(max(dot(R,E),0.0), 1.4 * shininess); \n' +
     'Ispec = clamp(Ispec, 0.0, 1.0) * 1.2; \n' +
         // write Total Color:
-
+    'float specVal = (Ispec.x + Ispec.y + Ispec.z) / 3.0; \n' +
+    'vec4 pixelatedColor = vec4(col, 1) * texture2D(tex, varTex + vec2( sin(gl_FragCoord.x + time * 0.00), cos(gl_FragCoord.y + time * 0.001) )* 0.01  * isTexEnabled); \n' +
     'vec4 texColor = vec4(col, 1) * texture2D(tex, varTex); \n' +
-    'vec4 finalColor = texColor *( Iamb + ( Idiff * 0.2 + Ispec )  ); \n' +
+    'vec4 finalColor = ((texColor * specVal) + ( pixelatedColor * (1.0 - specVal ))) *( Iamb + ( Idiff * 0.2 + Ispec )  ); \n' +
         'float grayscale = (finalColor.x + finalColor.y + finalColor.z) / 3.0; \n' +
     'vec3 invertColor = vec3(1.0 - finalColor.x, 1.0 -  finalColor.y, 1.0 - finalColor.z); \n' +
-    'float specVal = (Ispec.x + Ispec.y + Ispec.z) / 3.0; \n' +
+
         ' if ( isTexEnabled > 0.0 ) \n '+
     'gl_FragColor = vec4(finalColor.x * specVal + grayscale * ( 1.0 - specVal),finalColor.y * specVal + grayscale * ( 1.0 - specVal),finalColor.z * specVal + grayscale * ( 1.0 - specVal), 1); \n' +
 
@@ -509,17 +510,15 @@ function draw()
     var pos2x =  -Math.cos(time * 0.001) * 2.5;
 
     gl.bindTexture(gl.TEXTURE_2D, koalaTexture);
-    drawBox(pos1x , 0 , pos2x, 4, 0, 1, 0, time * 0.001, boxX , 10, boxZ );
+    drawBox(pos1x , 0 , pos2x, 4, 2, 1, 0, time * 0.001, boxX , 10, boxZ );
 
     gl.bindTexture(gl.TEXTURE_2D, pugTexture);
-    drawBox(pos1x + lightPosX, 0, pos2x + lightPosY, 4, 0, 0, 0, 0, boxX, 10, boxZ);
-
-
+    drawBox(pos1x + lightPosX, 2, pos2x + lightPosY, 4, 0, 0, 0, 0, boxX, 10, boxZ);
 
 
     //gl.bindTexture(gl.TEXTURE_2D, koalaTexture  + 1);
     //for ( var c = 0; c < 10; c ++ )
-    //    drawBox( Math.sin(time * 0.001 + c) * (c - 5) * 5.0,  (c - 5) * 5, Math.cos(time * 0.001) * (c - 5) * 5.0, 1 * Math.cos(time * 0.001 + c), 1, 1, 1, time * 0.001 + c);
+        //drawBox( Math.sin(time * 0.001 + c) * 130.0,  0, Math.cos(time * 0.001 + c) * 130.0, 0.25, 1, 1, 1, time * 0.001 + c, 0, 0, 0);
 }
 
 function update()
